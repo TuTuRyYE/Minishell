@@ -1,0 +1,16 @@
+Questions 1 à 5 terminé
+
+J'ai repris le TP 1 et je l'ai adapté à l'utilisation de readcmd.c
+
+Pour l'interface j'essaye de me rapprocher le plus 
+possible du bash que l'on a sur linux.
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Questions 6-7 en cours
+
+Pour la commande list j'ai encore du mal pour ecrire la commande associé aux 
+processus lancés depuis le shell.
+
+Pour la gestion des signaux je compte utiliser la primitive signal() et waitpid().
