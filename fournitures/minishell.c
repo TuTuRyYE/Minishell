@@ -5,6 +5,7 @@
 #include <sys/wait.h> /* wait */
 #include <signal.h>
 #include <errno.h>
+#include <fcntl.h> 
 #include "readcmd.h"
 
 void printDir() { 
@@ -211,10 +212,37 @@ int main(int argc, char *argv[]) {
                exit(1);
             } else if (pidFils == 0) { /*fils*/
                //premier parametre la commande tandis que le deuxième c'est la commande complete
+               if((cmd->in) != NULL) {
+                  //redirection de l'entrée standard, si erreur -> arrêt et message d'erreur
+                  int fd_in;
+                  if((fd_in = open(cmd->in, O_RDONLY)) < 0) {
+                     perror("");
+                     exit (EXIT_FAILURE);
+                  //on associe fd_in à l'entrée standard
+                  } else if(dup2(fd_in, 0) < 0) {
+                     perror("");
+                     exit (EXIT_FAILURE);
+                  }
+                  
+               }
+               if((cmd->out) != NULL) {
+                  //redirection de la sortie standard, si erreur -> arrêt et message d'erreur
+                  int fd_out;
+                  if((fd_out = open(cmd->out, O_WRONLY | O_CREAT | O_TRUNC, 0640)) < 0) {
+                     perror("");
+                     exit (EXIT_FAILURE);
+                  //on associe fd_in à la sortie standard
+                  } else if(dup2(fd_out, 1) < 0) {
+                     perror("");
+                     exit (EXIT_FAILURE);
+                  }
+                  
+               }
                if (execvp(cmd->seq[0][0], cmd->seq[0]) < 0) {
                   perror("La commande n'a pu être exécuté (execvp)"); 
                   exit (EXIT_FAILURE);
                }
+               exit(EXIT_SUCCESS); //Au cas où
             } else { /*pere*/
                int bg;
                //printf("processus %d (pere), de pere %d\n", getpid(), getppid ());
