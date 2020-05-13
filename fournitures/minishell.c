@@ -140,7 +140,9 @@ int main(int argc, char *argv[]) {
       if(i >= nb_jobs) {
          fprintf(stderr, "Mauvaise utilisation de l'id\n");
       } else {
-         p job = jobs[i];
+         p job = jobs[i];FR
+9+
+
          if(job.ended) {
             fprintf(stderr, "Mauvaise utilisation de l'id\n");
          } else {
@@ -160,111 +162,120 @@ int main(int argc, char *argv[]) {
       printf("%d ",getpid());
       fflush(stdout);
       cmd = readcmd();
-      if(*(cmd->seq) != NULL) {
-         //Commandes internes
-         //exit
-         if(strcmp("exit", cmd->seq[0][0]) == 0){
-            break;
-         }
-         //cd
-         else if(strcmp("cd", cmd->seq[0][0]) == 0){
-            cd(cmd->seq);
-         }
-         //list
-         else if(strcmp("list", cmd->seq[0][0]) == 0){
-            list(jobs, nb_jobs);
-         }
-         //stop
-         else if(strcmp("stop", cmd->seq[0][0]) == 0){
-            char *id_job = cmd->seq[0][1];
-            int id_job_int;
-            if(id_job == NULL || (id_job_int = atoi(id_job)) == 0) {
-               fprintf(stderr,"Erreur paramètre de stop\n");
-            } else {
-               stop(id_job_int);
+
+      if((cmd->err) != NULL) {
+         printf("%s\n", cmd->err);
+      } else {
+         if(*(cmd->seq) != NULL) {
+            //Commandes internes
+            //exit
+            if(strcmp("exit", cmd->seq[0][0]) == 0){
+               break;
             }
-         }
-         //bg
-         else if(strcmp("bg", cmd->seq[0][0]) == 0){
-            char *id_job = cmd->seq[0][1];
-            int id_job_int;
-            if(id_job == NULL || (id_job_int = atoi(id_job)) == 0) {
-               fprintf(stderr,"Erreur paramètre de stop\n");
-            } else {
-               bg(id_job_int);
+            //cd
+            else if(strcmp("cd", cmd->seq[0][0]) == 0){
+               cd(cmd->seq);
             }
-         }
-         //fg
-         else if(strcmp("fg", cmd->seq[0][0]) == 0){
-            char *id_job = cmd->seq[0][1];
-            int id_job_int;
-            if(id_job == NULL || (id_job_int = atoi(id_job)) == 0) {
-               fprintf(stderr,"Erreur paramètre de stop\n");
-            } else {
-               fg(id_job_int);
+            //list
+            else if(strcmp("list", cmd->seq[0][0]) == 0){
+               list(jobs, nb_jobs);
             }
-         }
-         //Commandes générales
-         else {
-            pidFils = fork();
-            if (pidFils == -1) {
-               printf("Erreur fork\n");
-               exit(1);
-            } else if (pidFils == 0) { /*fils*/
-               //premier parametre la commande tandis que le deuxième c'est la commande complete
-               if((cmd->in) != NULL) {
-                  //redirection de l'entrée standard, si erreur -> arrêt et message d'erreur
-                  int fd_in;
-                  if((fd_in = open(cmd->in, O_RDONLY)) < 0) {
-                     perror("");
-                     exit (EXIT_FAILURE);
-                  //on associe fd_in à l'entrée standard
-                  } else if(dup2(fd_in, 0) < 0) {
-                     perror("");
+            //stop
+            else if(strcmp("stop", cmd->seq[0][0]) == 0){
+               char *id_job = cmd->seq[0][1];
+               int id_job_int;
+               if(id_job == NULL || (id_job_int = atoi(id_job)) == 0) {
+                  fprintf(stderr,"Erreur paramètre de stop\n");
+               } else {
+                  stop(id_job_int);
+               }
+            }
+            //bg
+            else if(strcmp("bg", cmd->seq[0][0]) == 0){
+               char *id_job = cmd->seq[0][1];
+               int id_job_int;
+               if(id_job == NULL || (id_job_int = atoi(id_job)) == 0) {
+                  fprintf(stderr,"Erreur paramètre de stop\n");
+               } else {
+                  bg(id_job_int);
+               }
+            }
+            //fg
+            else if(strcmp("fg", cmd->seq[0][0]) == 0){
+               char *id_job = cmd->seq[0][1];
+               int id_job_int;
+               if(id_job == NULL || (id_job_int = atoi(id_job)) == 0) {
+                  fprintf(stderr,"Erreur paramètre de stop\n");
+               } else {
+                  fg(id_job_int);
+               }
+            }
+            //Commandes générales
+            else {
+               int i = 0;
+               while(cmd->seq[i] != NULL) {
+                  pidFils = fork();
+                  i++;
+               }
+               if (pidFils == -1) {
+                  printf("Erreur fork\n");
+                  exit(1);
+               } else if (pidFils == 0) { /*fils*/
+                  //premier parametre la commande tandis que le deuxième c'est la commande complete
+                  if((cmd->in) != NULL) {
+                     //redirection de l'entrée standard, si erreur -> arrêt et message d'erreur
+                     int fd_in;
+                     if((fd_in = open(cmd->in, O_RDONLY)) < 0) {
+                        perror("");
+                        exit (EXIT_FAILURE);
+                     //on associe fd_in à l'entrée standard
+                     } else if(dup2(fd_in, 0) < 0) {
+                        perror("");
+                        exit (EXIT_FAILURE);
+                     }
+                     
+                  }
+                  if((cmd->out) != NULL) {
+                     //redirection de la sortie standard, si erreur -> arrêt et message d'erreur
+                     int fd_out;
+                     if((fd_out = open(cmd->out, O_WRONLY | O_CREAT | O_TRUNC, 0640)) < 0) {
+                        perror("");
+                        exit (EXIT_FAILURE);
+                     //on associe fd_in à la sortie standard
+                     } else if(dup2(fd_out, 1) < 0) {
+                        perror("");
+                        exit (EXIT_FAILURE);
+                     }
+                     
+                  }
+                  if (execvp(cmd->seq[0][0], cmd->seq[0]) < 0) {
+                     perror("La commande n'a pu être exécuté (execvp)"); 
                      exit (EXIT_FAILURE);
                   }
-                  
-               }
-               if((cmd->out) != NULL) {
-                  //redirection de la sortie standard, si erreur -> arrêt et message d'erreur
-                  int fd_out;
-                  if((fd_out = open(cmd->out, O_WRONLY | O_CREAT | O_TRUNC, 0640)) < 0) {
-                     perror("");
-                     exit (EXIT_FAILURE);
-                  //on associe fd_in à la sortie standard
-                  } else if(dup2(fd_out, 1) < 0) {
-                     perror("");
-                     exit (EXIT_FAILURE);
+                  exit(EXIT_SUCCESS); //Au cas où
+               } else { /*pere*/
+                  int bg;
+                  //printf("processus %d (pere), de pere %d\n", getpid(), getppid ());
+                  //printf("processus %d (p`ere), de p`ere %d\n", getpid(), getppid ());
+                  if((cmd->backgrounded) != NULL) {
+                     bg = 1;
+                     ajouter_job(pidFils, bg, cmd->seq);
+                     //CREER UN DECALAGE A REGLER
+                     continue;
+                  } else {
+                     bg = 0;
+                     ajouter_job(pidFils, bg, cmd->seq);
+                     idFils=wait(&codeTerm);
                   }
-                  
-               }
-               if (execvp(cmd->seq[0][0], cmd->seq[0]) < 0) {
-                  perror("La commande n'a pu être exécuté (execvp)"); 
-                  exit (EXIT_FAILURE);
-               }
-               exit(EXIT_SUCCESS); //Au cas où
-            } else { /*pere*/
-               int bg;
-               //printf("processus %d (pere), de pere %d\n", getpid(), getppid ());
-               //printf("processus %d (p`ere), de p`ere %d\n", getpid(), getppid ());
-               if((cmd->backgrounded) != NULL) {
-                  bg = 1;
-                  ajouter_job(pidFils, bg, cmd->seq);
-                  //CREER UN DECALAGE A REGLER
-                  continue;
-               } else {
-                  bg = 0;
-                  ajouter_job(pidFils, bg, cmd->seq);
-                  idFils=wait(&codeTerm);
-               }
-               if (idFils  ==  -1) {
-                  perror("wait ");
-                  exit (2);
-               }
-               if (WIFEXITED(codeTerm )) {
-                  //printf("[%d] fin fils %d par exit %d\n",codeTerm ,idFils ,WEXITSTATUS(codeTerm ));
-               } else {
-                  //printf("[%d] fin fils %d par signal %d\n",codeTerm ,idFils ,WTERMSIG(codeTerm ));
+                  if (idFils  ==  -1) {
+                     perror("wait ");
+                     exit (2);
+                  }
+                  if (WIFEXITED(codeTerm )) {
+                     //printf("[%d] fin fils %d par exit %d\n",codeTerm ,idFils ,WEXITSTATUS(codeTerm ));
+                  } else {
+                     //printf("[%d] fin fils %d par signal %d\n",codeTerm ,idFils ,WTERMSIG(codeTerm ));
+                  }
                }
             }
          }
