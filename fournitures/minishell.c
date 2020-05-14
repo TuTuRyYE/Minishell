@@ -65,6 +65,11 @@ void handler_chld(int signal_num) {
    }   
 }
 
+void handler_sigpipe(int signal_num) {
+   printf("\n     Processus de pid %d : J'ai reçu le signal %d\n", getpid(), signal_num) ;
+   return ;
+ }
+
 int main(int argc, char *argv[]) {
    struct cmdline *cmd;
    pid_t pidFils, idFils;
@@ -156,6 +161,7 @@ int main(int argc, char *argv[]) {
    }
 
    signal(SIGCHLD, handler_chld);
+   signal(SIGPIPE, handler_sigpipe);
 
    while(1) {
       printDir();
@@ -212,10 +218,14 @@ int main(int argc, char *argv[]) {
             }
             //Commandes générales
             else {
-               int i = 0;
+               int retour_pipe;
+               int nb_cmd = 0;
                while(cmd->seq[i] != NULL) {
-                  pidFils = fork();
-                  i++;
+                  nb_cmd++; 
+               }
+               int pipe_cmd[nb_cmd-1][2];
+               for (int i = 0, i < nb_cmd-1; i++) {
+                  retour_pipe = pipe(pipe_cmd[i]);
                }
                if (pidFils == -1) {
                   printf("Erreur fork\n");
