@@ -6,27 +6,12 @@
 #include "readcmd.h"
 
 
-static void handler(int signum)
-{
-    printf("ress");
-    //exit(EXIT_SUCCESS);
-}
-
 
 int main()
 {
-    struct sigaction sa;
-
-
-    sa.sa_handler = handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART; /* Restart functions if
-                                 interrupted by handler */
-    if (sigaction(SIGTSTP, &sa, NULL) == -1)
-        /* Handle error */;
-
-
-    while(1) {
-
+    if(2 > 1) {
+        printf("lol\n");
+    } else if(2 > 1) {
+        printf("lol\n");
     }
 }
