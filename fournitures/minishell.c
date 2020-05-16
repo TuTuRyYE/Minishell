@@ -65,22 +65,6 @@ void handler_chld(int signal_num) {
    }   
 }
 
-void close_pipes(int i, int nb_pipe, int *pipe_cmd[2]) {
-   for(int j = 0; j < nb_pipe; j++) {
-      if(i == 0 && j == 0) {
-         close(pipe_cmd[j][0]);
-      } else if(i == nb_pipe && j == (nb_pipe-1)) {
-         close(pipe_cmd[j][1]);
-      } else if(j == i-1) {
-         close(pipe_cmd[j][1]);
-      } else if(j == i) {
-         close(pipe_cmd[j][0]);
-      } else {
-         close(pipe_cmd[j][0]);
-         close(pipe_cmd[j][1]);
-      }
-   }
-}
 
 void handler_sigpipe(int signal_num) {
    printf("\n     Processus de pid %d : J'ai reçu le signal %d\n", getpid(), signal_num) ;
@@ -193,7 +177,7 @@ int main(int argc, char *argv[]) {
          if(*(cmd->seq) != NULL) {
             //Commandes internes
             //exit
-            if(strcmp("exit", cmd->seq[0][0]) == 0){
+            if(strcmp("exit", cmd->seq[0][0]) == 0) {
                break;
             }
             //cd
@@ -296,9 +280,9 @@ int main(int argc, char *argv[]) {
                   } else { /*pere*/
                      //printf("\n\n%d\n\n", nb_cmd);
                      //printf("\n\n%d\n\n", i);
-                     close(pipe_cmd[0][0]);
-                     close(pipe_cmd[0][1]);
                      if(i==nb_cmd-1) {
+                        close(pipe_cmd[0][0]);
+                        close(pipe_cmd[0][1]);
                         int bg;
                         //printf("processus %d (pere), de pere %d\n", getpid(), getppid ());
                         //printf("processus %d (p`ere), de p`ere %d\n", getpid(), getppid ());
