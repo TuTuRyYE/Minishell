@@ -8,10 +8,10 @@
 
 
 int main()
-{
-    if(2 > 1) {
-        printf("lol\n");
-    } else if(2 > 1) {
-        printf("lol\n");
-    }
+{   
+    
+    struct cmdline *cmd;
+    cmd = readcmd();
+    printf("%s", cmd->seq[0][0]);
+
 }

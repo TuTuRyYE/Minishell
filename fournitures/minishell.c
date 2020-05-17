@@ -25,27 +25,9 @@ void cd(char ***input) {
    } 
 }
 
-void afficher_commande(char ***command){
-   //printf("%s ", command[0][0]);
-   //printf("test5");
-   int i = 0;
-   //printf("test6");
-   int j = 0;
-   //printf("test1");
-   while(command[i] != NULL){
-      //printf("test2");
-      while(command[i][j] != NULL){
-            //printf("test");
-            printf("%s ", command[i][j]);
-      j = j + 1;
-      }				
-   i = i + 1;
-	}
-}
-
 void handler_chld(int signal_num) {
    int fils_termine, wstatus ;
-   printf("\nJ'ai reçu le signal %d\n",  signal_num) ;
+   //printf("\nJ'ai reçu le signal %d\n",  signal_num) ;
    if (signal_num == SIGCHLD) {
       while ((fils_termine = (int) waitpid(-1, &wstatus, WNOHANG | WUNTRACED | WCONTINUED)) > 0) {
          if WIFEXITED(wstatus) {
@@ -136,18 +118,32 @@ int main(int argc, char *argv[]) {
 		int id_shell;
 		pid_t pid;
 		int bg_flag;
-		char ***command;
+		char command[1024]; //fixe mais de grande taille
 		int ended;
 	}p;
 
    p jobs[1000];
 	int nb_jobs = 1;
 
-   void ajouter_job(pid_t pid, int bg_flag, char ***command) {
+   void ajouter_job(pid_t pid, int bg_flag, char ***cmd) {
+      char command[1024] = "";
+      int i = 0;
+      int j = 0;
+      while(cmd[i] != NULL){
+         if(i != 0) {
+            strcat(command, "| ");
+         }
+         while(cmd[i][j] != NULL){
+            strcat(command, cmd[i][j]);
+            strcat(command, " ");
+            j = j + 1;
+         }
+         i = i + 1;
+      }
 		jobs[nb_jobs].id_shell = nb_jobs;
 		jobs[nb_jobs].pid = pid;
 		jobs[nb_jobs].bg_flag = bg_flag;
-		jobs[nb_jobs].command = command;
+		strcpy(jobs[nb_jobs].command, command);
 		jobs[nb_jobs].ended = 0;
       nb_jobs = nb_jobs + 1;
 	}
@@ -160,8 +156,7 @@ int main(int argc, char *argv[]) {
       			continue;
       		}
       		else{
-      			printf("%-10d%-10d%-10d", jobs[i].id_shell, jobs[i].pid, jobs[i].bg_flag);
-      			printf("\n");
+      			printf("%-10d%-10d%-10d%-10s\n", jobs[i].id_shell, jobs[i].pid, jobs[i].bg_flag, jobs[i].command);
      		} 			
     	}
 	}
@@ -176,6 +171,30 @@ int main(int argc, char *argv[]) {
          } else {
             if(kill(job.pid, 20) < 0){
                perror("bg");
+}
+
+void close_pipes(int i, int nb_pipe, int pipe_cmd[nb_pipe][2]) {
+   if(i > nb_pipe) {
+      printf("Erreur index i, pour le nombre de commandes");
+      return;
+   }
+   for(int j = 0; j < nb_pipe; j++) {
+      if(i < 0) {
+         close(pipe_cmd[j][0]);
+         close(pipe_cmd[j][1]);
+      } else if(i == 0) {
+         if(j == 0) {
+            close(pipe_cmd[j][0]);
+            if(dup2(pipe_cmd[j][1], 1) < 0) {
+               perror("");
+               exit(EXIT_FAILURE);
+            }
+         } else {
+            close(pipe_cmd[j][0]);
+            close(pipe_cmd[j][1]);
+         }
+      } else if(i == nb_pipe) {
+         if(j == nb_pipe-1) {
             }
          }
       }
@@ -301,7 +320,7 @@ int main(int argc, char *argv[]) {
                         //on associe fd_in à l'entrée standard
                         } else if(dup2(fd_in, 0) < 0) {
                            perror("");
-                           exit (EXIT_FAILURE);
+                           exit(EXIT_FAILURE);
                         }
                      }
                      if((cmd->out) != NULL) {
@@ -337,7 +356,6 @@ int main(int argc, char *argv[]) {
                            continue;
                         } else {
                            bg = 0;
-                           ajouter_job(pidFils, bg, cmd->seq);
                            idFils=wait(&codeTerm);
                         }
                         if (idFils  ==  -1) {
@@ -345,9 +363,9 @@ int main(int argc, char *argv[]) {
                            exit (2);
                         }
                         if (WIFEXITED(codeTerm )) {
-                           //printf("[%d] fin fils %d par exit %d\n",codeTerm ,idFils ,WEXITSTATUS(codeTerm ));
+                           printf("[%d] fin fils %d par exit %d\n",codeTerm ,idFils ,WEXITSTATUS(codeTerm ));
                         } else {
-                           //printf("[%d] fin fils %d par signal %d\n",codeTerm ,idFils ,WTERMSIG(codeTerm ));
+                           printf("[%d] fin fils %d par signal %d\n",codeTerm ,idFils ,WTERMSIG(codeTerm ));
                         }
                      }
                   }
