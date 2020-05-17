@@ -71,6 +71,58 @@ void handler_sigpipe(int signal_num) {
    return ;
 }
 
+void close_pipes(int i, int nb_pipe, int pipe_cmd[nb_pipe][2]) {
+   if(i > nb_pipe) {
+      printf("Erreur index i, pour le nombre de commandes");
+      return;
+   }
+   for(int j = 0; j < nb_pipe; j++) {
+      if(i < 0) {
+         close(pipe_cmd[j][0]);
+         close(pipe_cmd[j][1]);
+      } else if(i == 0) {
+         if(j == 0) {
+            close(pipe_cmd[j][0]);
+            if(dup2(pipe_cmd[j][1], 1) < 0) {
+               perror("");
+               exit(EXIT_FAILURE);
+            }
+         } else {
+            close(pipe_cmd[j][0]);
+            close(pipe_cmd[j][1]);
+         }
+      } else if(i == nb_pipe) {
+         if(j == nb_pipe-1) {
+            close(pipe_cmd[j][1]);
+            if(dup2(pipe_cmd[j][0], 0) < 0) {
+               perror("");
+               exit(EXIT_FAILURE);
+            }
+         } else {
+            close(pipe_cmd[j][0]);
+            close(pipe_cmd[j][1]);
+         }
+      } else {
+         if(j == i-1) {
+            close(pipe_cmd[j][1]);
+            if(dup2(pipe_cmd[j][0], 0) < 0) {
+               perror("");
+               exit(EXIT_FAILURE);
+            }
+         } else if(j == i) {
+            close(pipe_cmd[j][0]);
+            if(dup2(pipe_cmd[j][1], 1) < 0) {
+               perror("");
+               exit(EXIT_FAILURE);
+            }
+         } else {
+            close(pipe_cmd[j][0]);
+            close(pipe_cmd[j][1]);
+         }
+      }
+   }
+}
+
 
 
 int main(int argc, char *argv[]) {
@@ -166,6 +218,7 @@ int main(int argc, char *argv[]) {
    signal(SIGPIPE, handler_sigpipe);
 
    while(1) {
+      sleep(1); //pour la mise en page
       printDir();
       printf("%d ",getpid());
       fflush(stdout);
@@ -224,7 +277,7 @@ int main(int argc, char *argv[]) {
                while(cmd->seq[nb_cmd] != NULL) {
                   nb_cmd++; 
                }
-               int nb_pipe = 1;
+               int nb_pipe = nb_cmd-1;
                int pipe_cmd[nb_pipe][2];
                for(int i = 0; i < nb_pipe; i++) {
                   if(pipe(pipe_cmd[i]) < 0) {
@@ -263,15 +316,7 @@ int main(int argc, char *argv[]) {
                            exit (EXIT_FAILURE);
                         }
                      }
-                     int dupdesc;
-                     if(i == 0) {
-                        close(pipe_cmd[0][0]);
-                        dupdesc = dup2(pipe_cmd[0][1], 1);
-                     }
-                     if(i == 1) {
-                        close(pipe_cmd[0][1]);
-                        dupdesc = dup2(pipe_cmd[0][0], 0);
-                     }
+                     close_pipes(i, nb_pipe, pipe_cmd);
                      if (execvp(cmd->seq[i][0], cmd->seq[i]) < 0) {
                         perror("La commande n'a pu être exécuté (execvp)"); 
                         exit(EXIT_FAILURE);
@@ -281,8 +326,7 @@ int main(int argc, char *argv[]) {
                      //printf("\n\n%d\n\n", nb_cmd);
                      //printf("\n\n%d\n\n", i);
                      if(i==nb_cmd-1) {
-                        close(pipe_cmd[0][0]);
-                        close(pipe_cmd[0][1]);
+                        close_pipes(-1, nb_pipe, pipe_cmd);
                         int bg;
                         //printf("processus %d (pere), de pere %d\n", getpid(), getppid ());
                         //printf("processus %d (p`ere), de p`ere %d\n", getpid(), getppid ());
