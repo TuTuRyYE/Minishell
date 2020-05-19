@@ -25,29 +25,6 @@ void cd(char ***input) {
    } 
 }
 
-void handler_chld(int signal_num) {
-   int fils_termine, wstatus ;
-   //printf("\nJ'ai reçu le signal %d\n",  signal_num) ;
-   if (signal_num == SIGCHLD) {
-      while ((fils_termine = (int) waitpid(-1, &wstatus, WNOHANG | WUNTRACED | WCONTINUED)) > 0) {
-         if WIFEXITED(wstatus) {
-            printf("\nMon fils de pid %d s'est arrete avec exit %d\n",  fils_termine, WEXITSTATUS(wstatus)) ;
-         }
-         else if WIFSIGNALED(wstatus) {
-            printf("\nMon fils de pid %d a recu le signal %d\n",  fils_termine, WTERMSIG(wstatus)) ;
-         }
-            else if (WIFCONTINUED(wstatus)) {
-            printf("\nMon fils de pid %d a ete relance \n",  fils_termine) ;
-         }
-         else if (WIFSTOPPED(wstatus)) {
-            printf("\nMon fils de pid %d a ete suspendu \n", fils_termine) ;
-         }
-         sleep(1) ;
-      }
-   }   
-}
-
-
 void handler_sigpipe(int signal_num) {
    printf("\n     Processus de pid %d : J'ai reçu le signal %d\n", getpid(), signal_num) ;
    return ;
@@ -117,15 +94,15 @@ int main(int argc, char *argv[]) {
    typedef struct processus{
 		int id_shell;
 		pid_t pid;
-		int bg_flag;
+		char status; //'A' active et 'S' stopped
 		char command[1024]; //fixe mais de grande taille
 		int ended;
 	}p;
 
    p jobs[1000];
-	int nb_jobs = 1;
+	int nb_jobs = 0;
 
-   void ajouter_job(pid_t pid, int bg_flag, char ***cmd) {
+   void ajouter_job(pid_t pid, char status, char ***cmd) {
       char command[1024] = "";
       int i = 0;
       int j = 0;
@@ -140,23 +117,62 @@ int main(int argc, char *argv[]) {
          }
          i = i + 1;
       }
-		jobs[nb_jobs].id_shell = nb_jobs;
+		jobs[nb_jobs].id_shell = nb_jobs+1;
 		jobs[nb_jobs].pid = pid;
-		jobs[nb_jobs].bg_flag = bg_flag;
+		jobs[nb_jobs].status = status;
 		strcpy(jobs[nb_jobs].command, command);
 		jobs[nb_jobs].ended = 0;
       nb_jobs = nb_jobs + 1;
-	}
+   }
+
+   //retourne -1 si aucun pid n'est associé à un job
+   int find_job(int pid) {
+      for (int i = 0; i < nb_jobs; i++) {
+         if(jobs[i].pid == pid && jobs[i].ended == 0) {
+            return i;
+         }
+      }
+      return -1;
+   }
+
+   void handler_chld(int signal_num) {
+   int fils_termine, wstatus ;
+   //printf("\nJ'ai reçu le signal %d\n",  signal_num) ;
+   if (signal_num == SIGCHLD) {
+      while ((fils_termine = (int) waitpid(-1, &wstatus, WNOHANG | WUNTRACED | WCONTINUED)) > 0) {
+         int id_job = find_job(fils_termine);
+         if(id_job < 0) {
+            printf("Erreur pid appel find_job");
+         }
+         if WIFEXITED(wstatus) {
+            jobs[id_job].ended = 1;
+            printf("\nMon fils de pid %d s'est arrete avec exit %d\n",  fils_termine, WEXITSTATUS(wstatus));
+         }
+         else if WIFSIGNALED(wstatus) {
+            printf("\nMon fils de pid %d a recu le signal %d\n",  fils_termine, WTERMSIG(wstatus));
+         }
+         else if (WIFCONTINUED(wstatus)) {
+            jobs[id_job].status = 'A';
+            printf("\nMon fils de pid %d a ete relance \n",  fils_termine);
+         }
+         else if (WIFSTOPPED(wstatus)) {
+            jobs[id_job].status = 'S';
+            printf("\nMon fils de pid %d a ete suspendu \n", fils_termine);
+         }
+         sleep(1) ;
+      }
+   }   
+}
 
    void list(p jobs[], int nb_jobs) {
 		printf("Liste des jobs :\n");
-  		printf("%-10s%-10s%-10s%-10s\n","ID_SHELL", "PID", "BG(1/0)", "COMMANDE");
-		for(int i = 1; i < nb_jobs; i = i+1 ){
+  		printf("%-10s%-10s%-13s%-10s\n","ID_SHELL", "PID", "STATE(A/S)", "COMMANDE");
+		for(int i = 0; i < nb_jobs; i++){
       		if (jobs[i].ended){
       			continue;
       		}
       		else{
-      			printf("%-10d%-10d%-10d%-10s\n", jobs[i].id_shell, jobs[i].pid, jobs[i].bg_flag, jobs[i].command);
+      			printf("%-10d%-10d%-13c%-10s\n", jobs[i].id_shell, jobs[i].pid, jobs[i].status, jobs[i].command);
      		} 			
     	}
 	}
@@ -171,34 +187,39 @@ int main(int argc, char *argv[]) {
          } else {
             if(kill(job.pid, 20) < 0){
                perror("bg");
-}
-
-void close_pipes(int i, int nb_pipe, int pipe_cmd[nb_pipe][2]) {
-   if(i > nb_pipe) {
-      printf("Erreur index i, pour le nombre de commandes");
-      return;
-   }
-   for(int j = 0; j < nb_pipe; j++) {
-      if(i < 0) {
-         close(pipe_cmd[j][0]);
-         close(pipe_cmd[j][1]);
-      } else if(i == 0) {
-         if(j == 0) {
-            close(pipe_cmd[j][0]);
-            if(dup2(pipe_cmd[j][1], 1) < 0) {
-               perror("");
-               exit(EXIT_FAILURE);
-            }
-         } else {
-            close(pipe_cmd[j][0]);
-            close(pipe_cmd[j][1]);
-         }
-      } else if(i == nb_pipe) {
-         if(j == nb_pipe-1) {
             }
          }
       }
    }
+
+   //permet de fermer les pipes pour les processus qui ne les utilisent pas
+   //i=-1 -> les ferment tous (père)
+   void close_pipes(int i, int nb_pipe, int pipe_cmd[nb_pipe][2]) {
+      if(i > nb_pipe) {
+         printf("Erreur index i, pour le nombre de commandes");
+         return;
+      }
+      for(int j = 0; j < nb_pipe; j++) {
+         if(i < 0) {
+            close(pipe_cmd[j][0]);
+            close(pipe_cmd[j][1]);
+         } else if(i == 0) {
+            if(j == 0) {
+               close(pipe_cmd[j][0]);
+               if(dup2(pipe_cmd[j][1], 1) < 0) {
+                  perror("");
+                  exit(EXIT_FAILURE);
+               }
+            } else {
+               close(pipe_cmd[j][0]);
+               close(pipe_cmd[j][1]);
+            }
+         } else if(i == nb_pipe) {
+            if(j == nb_pipe-1) {
+               }
+            }
+         }
+      }
 
    void bg(int i) {
       if(i >= nb_jobs) {
@@ -216,13 +237,12 @@ void close_pipes(int i, int nb_pipe, int pipe_cmd[nb_pipe][2]) {
    }
 
    void fg(int i) {
-      if(i >= nb_jobs) {
-         fprintf(stderr, "Mauvaise utilisation de l'id\n");
+      if(i >= nb_jobs+1) {
+         fprintf(stderr, "Mauvaise utilisation de l'id du job\n");
       } else {
          p job = jobs[i];
-
          if(job.ended) {
-            fprintf(stderr, "Mauvaise utilisation de l'id\n");
+            fprintf(stderr, "Mauvaise utilisation de l'id (job terminé)\n");
          } else {
             if(kill(job.pid, 18) < 0){
                perror("bg");
@@ -239,7 +259,7 @@ void close_pipes(int i, int nb_pipe, int pipe_cmd[nb_pipe][2]) {
    while(1) {
       sleep(1); //pour la mise en page
       printDir();
-      printf("%d ",getpid());
+      //printf("%d ",getpid());
       fflush(stdout);
       cmd = readcmd();
 
@@ -265,7 +285,7 @@ void close_pipes(int i, int nb_pipe, int pipe_cmd[nb_pipe][2]) {
                char *id_job = cmd->seq[0][1];
                int id_job_int;
                if(id_job == NULL || (id_job_int = atoi(id_job)) == 0) {
-                  fprintf(stderr,"Erreur paramètre de stop\n");
+                  fprintf(stderr,"Erreur paramètre stop\n");
                } else {
                   stop(id_job_int);
                }
@@ -275,7 +295,7 @@ void close_pipes(int i, int nb_pipe, int pipe_cmd[nb_pipe][2]) {
                char *id_job = cmd->seq[0][1];
                int id_job_int;
                if(id_job == NULL || (id_job_int = atoi(id_job)) == 0) {
-                  fprintf(stderr,"Erreur paramètre de stop\n");
+                  fprintf(stderr,"Erreur paramètre bg\n");
                } else {
                   bg(id_job_int);
                }
@@ -285,7 +305,7 @@ void close_pipes(int i, int nb_pipe, int pipe_cmd[nb_pipe][2]) {
                char *id_job = cmd->seq[0][1];
                int id_job_int;
                if(id_job == NULL || (id_job_int = atoi(id_job)) == 0) {
-                  fprintf(stderr,"Erreur paramètre de stop\n");
+                  fprintf(stderr,"Erreur paramètre de fg\n");
                } else {
                   fg(id_job_int);
                }
@@ -350,19 +370,19 @@ void close_pipes(int i, int nb_pipe, int pipe_cmd[nb_pipe][2]) {
                         //printf("processus %d (pere), de pere %d\n", getpid(), getppid ());
                         //printf("processus %d (p`ere), de p`ere %d\n", getpid(), getppid ());
                         if((cmd->backgrounded) != NULL) {
-                           bg = 1;
-                           ajouter_job(pidFils, bg, cmd->seq);
+                           ajouter_job(pidFils, 'A', cmd->seq);
                            //CREER UN DECALAGE A REGLER
                            continue;
                         } else {
-                           bg = 0;
+                           ajouter_job(pidFils, 'A', cmd->seq);
                            idFils=wait(&codeTerm);
+                           printf("stop");
                         }
                         if (idFils  ==  -1) {
                            perror("wait ");
                            exit (2);
                         }
-                        if (WIFEXITED(codeTerm )) {
+                        if (WIFEXITED(codeTerm)) {
                            printf("[%d] fin fils %d par exit %d\n",codeTerm ,idFils ,WEXITSTATUS(codeTerm ));
                         } else {
                            printf("[%d] fin fils %d par signal %d\n",codeTerm ,idFils ,WTERMSIG(codeTerm ));
