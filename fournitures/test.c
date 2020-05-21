@@ -3,15 +3,17 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/wait.h> /* wait */
-#include "readcmd.h"
+
+static volatile int keepRunning = 1;
+void intHandler(int dummy) {
+    printf("ctrl-z");
+    keepRunning = 0;
+}
 
 
+int main() {   
+    signal(SIGINT, intHandler);
+    while (keepRunning) { 
 
-int main()
-{   
-    
-    struct cmdline *cmd;
-    cmd = readcmd();
-    printf("%s", cmd->seq[0][0]);
-
+        }
 }

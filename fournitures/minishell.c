@@ -91,8 +91,7 @@ int main(int argc, char *argv[]) {
    struct cmdline *cmd;
    pid_t pidFils, idFils;
    int codeTerm;
-
-
+   pid_t fg_pid = 0;
 
    typedef struct processus{
 		int id_shell;
@@ -138,36 +137,49 @@ int main(int argc, char *argv[]) {
       return -1;
    }
 
-
-
    void handler_chld(int signal_num) {
-   int fils_termine, wstatus;
-   //printf("\nJ'ai reçu le signal %d\n",  signal_num) ;
-   if (signal_num == SIGCHLD) {
-      while ((fils_termine = (int) waitpid(-1, &wstatus, WNOHANG | WUNTRACED | WCONTINUED)) > 0) {
-         int id_job = find_job(fils_termine);
-         if(id_job < 0) {
-            printf("Erreur pid appel find_job");
+      int fils_termine, wstatus;
+      //printf("\nJ'ai reçu le signal %d\n",  signal_num) ;
+      if (signal_num == SIGCHLD) {
+         while ((fils_termine = (int) waitpid(-1, &wstatus, WNOHANG | WUNTRACED | WCONTINUED)) > 0) {
+            int id_job = find_job(fils_termine);
+            if(id_job > 0) {
+               if WIFEXITED(wstatus) {
+                  jobs[id_job].ended = 1;
+                  printf("\nFin de %d, commande: %s\n",  jobs[id_job].id_shell, jobs[id_job].command);
+               } else if(WIFSIGNALED(wstatus)) {
+                  jobs[id_job].ended = 1;
+                  printf("\nFin de %d, commande: %s\n",  jobs[id_job].id_shell, jobs[id_job].command);
+               } else if(WIFCONTINUED(wstatus)) {
+                  jobs[id_job].status = 'A';
+                  printf("\nRelancement de %d, commande: %s\n",  jobs[id_job].id_shell, jobs[id_job].command);
+               } else if(WIFSTOPPED(wstatus)) {
+                  jobs[id_job].status = 'S';
+                  printf("\nSuspension de %d, commande: %s\n",  jobs[id_job].id_shell, jobs[id_job].command);
+               }
+            }
          }
-         if WIFEXITED(wstatus) {
-            jobs[id_job].ended = 1;
-            printf("\nMon fils de pid %d s'est arrete avec exit %d\n",  fils_termine, WEXITSTATUS(wstatus));
+      } else if(signal_num == SIGINT) {
+         signal(signal_num, SIG_IGN);
+         //printf("%d", fg_pid);
+         if(fg_pid > 0) {
+            if(kill(fg_pid, 15) < 0){
+                  perror("SIGINT handler");
+            }
          }
-         else if WIFSIGNALED(wstatus) {
-            printf("\nMon fils de pid %d a recu le signal %d\n",  fils_termine, WTERMSIG(wstatus));
+         signal(signal_num, handler_chld);
+      } else if(signal_num == SIGTSTP) {
+         signal(signal_num, SIG_IGN);
+         //printf("%d", fg_pid);
+         if(fg_pid > 0) {
+            if(kill(fg_pid, 19) < 0){
+                  perror("SIGTSTP handler");
+            }
          }
-         else if (WIFCONTINUED(wstatus)) {
-            jobs[id_job].status = 'A';
-            printf("\nMon fils de pid %d a ete relance \n",  fils_termine);
-         }
-         else if (WIFSTOPPED(wstatus)) {
-            jobs[id_job].status = 'S';
-            printf("\nMon fils de pid %d a ete suspendu \n", fils_termine);
-         }
-         sleep(1) ;
+         signal(signal_num, handler_chld);
       }
-   }   
-}
+   }
+
 
    void list(p jobs[], int nb_jobs) {
 		printf("Liste des jobs :\n");
@@ -186,11 +198,10 @@ int main(int argc, char *argv[]) {
       if(i > nb_jobs) {
          fprintf(stderr, "Pas de processus associé à cette ID\n");
       } else {
-         p job = jobs[i-1];
-         if(job.ended) {
+         if(jobs[i-1].ended) {
             fprintf(stderr, "Processus déjà terminé\n");
          } else {
-            if(kill(job.pid, 19) < 0){
+            if(kill(jobs[i-1].pid, 19) < 0){
                perror("stop");
             }
          }
@@ -201,11 +212,10 @@ int main(int argc, char *argv[]) {
       if(i > nb_jobs) {
          fprintf(stderr, "Mauvaise utilisation de l'id\n");
       } else {
-         p job = jobs[i-1];
-         if(job.ended) {
+         if(jobs[i-1].ended) {
             fprintf(stderr, "Mauvaise utilisation de l'id\n");
          } else {
-            if(kill(job.pid, 18) < 0){
+            if(kill(jobs[i-1].pid, 18) < 0){
                perror("bg");
             }
          }
@@ -216,35 +226,38 @@ int main(int argc, char *argv[]) {
       if(i > nb_jobs) {
          fprintf(stderr, "Mauvaise utilisation de l'id du job\n");
       } else {
-         p job = jobs[i-1];
-         if(job.ended) {
+         if(jobs[i-1].ended) {
             fprintf(stderr, "Mauvaise utilisation de l'id (job terminé)\n");
          } else {
-            if(kill(job.pid, 18) < 0){
+            if(kill(jobs[i-1].pid, 18) < 0){
                perror("fg");
             } else {
-               idFils=waitpid(job.pid, &codeTerm, WUNTRACED);
+               fg_pid = jobs[i-1].pid;
+               idFils=waitpid(jobs[i-1].pid, &codeTerm, WUNTRACED);
                if (idFils  ==  -1) {
                   perror("wait ");
                   exit (2);
                }
                if (WIFEXITED(codeTerm)) {
-                  job.ended = 1;
-                  printf("[%d] fg fin fils %d par exit %d\n",codeTerm ,idFils ,WEXITSTATUS(codeTerm));
+                  jobs[i-1].ended = 1;
+                  fg_pid = 0;
                } else if(WIFSTOPPED(codeTerm)){
-                  job.status = 'S';
-                  printf("[%d] fg supension fils %d par signal %d\n",codeTerm ,idFils ,WSTOPSIG(codeTerm));
+                  jobs[i-1].status = 'S';
+                  fg_pid = 0;
+                  printf("\nSuspension de %d, commande: %s\n",  jobs[i-1].id_shell, jobs[i-1].command);
                } else {
-                  printf("[%d] fg fin fils %d par signal %d\n",codeTerm ,idFils ,WTERMSIG(codeTerm));
-                  job.ended = 1;
+                  jobs[i-1].ended = 1;
+                  fg_pid = 0;
                }
             }
          }
       }
    }
-
+   //on recouvre les signaux de manière gloabale
    signal(SIGCHLD, handler_chld);
    signal(SIGPIPE, handler_sigpipe);
+   signal(SIGINT, handler_chld);
+   signal(SIGTSTP, handler_chld);
 
    while(1) {
       //sleep(1); //pour la mise en page
@@ -321,12 +334,17 @@ int main(int argc, char *argv[]) {
                      exit(1);
                   } else if (pidFils == 0) { /*fils*/
                      //premier parametre la commande tandis que le deuxième c'est la commande complete
+                     if((cmd->backgrounded) != NULL) {
+                        //si la commande est lancé en fond
+                        signal(SIGINT, SIG_IGN);
+                        signal(SIGTSTP, SIG_IGN);
+                     }
                      if((cmd->in) != NULL) {
                         //redirection de l'entrée standard, si erreur -> arrêt et message d'erreur
                         int fd_in;
                         if((fd_in = open(cmd->in, O_RDONLY)) < 0) {
                            perror("");
-                           exit (EXIT_FAILURE);
+                           exit(EXIT_FAILURE);
                         //on associe fd_in à l'entrée standard
                         } else if(dup2(fd_in, 0) < 0) {
                            perror("");
@@ -364,8 +382,9 @@ int main(int argc, char *argv[]) {
                            //CREER UN DECALAGE A REGLER
                            continue;
                         } else {
+                           fg_pid = pidFils;
                            ajouter_job(pidFils, 'A', cmd->seq);
-                           idFils=waitpi0d(pidFils, &codeTerm, WUNTRACED);
+                           idFils=waitpid(pidFils, &codeTerm, WUNTRACED);
                         }
                         if (idFils  ==  -1) {
                            perror("wait ");
@@ -373,13 +392,14 @@ int main(int argc, char *argv[]) {
                         }
                         if (WIFEXITED(codeTerm)) {
                            jobs[nb_jobs-1].ended = 1;
-                           printf("[%d] fin fils %d par exit %d\n",codeTerm ,idFils ,WEXITSTATUS(codeTerm));
+                           fg_pid = 0;
                         } else if(WIFSTOPPED(codeTerm)){
                            jobs[nb_jobs-1].status = 'S';
-                           printf("[%d] supension fils %d par signal %d\n",codeTerm ,idFils ,WSTOPSIG(codeTerm));
+                           fg_pid = 0;
+                           printf("\nSuspension de %d, commande: %s\n",  jobs[nb_jobs-1].id_shell, jobs[nb_jobs-1].command);
                         } else {
-                           printf("[%d] fin fils %d par signal %d\n",codeTerm ,idFils ,WTERMSIG(codeTerm));
                            jobs[nb_jobs-1].ended = 1;
+                           fg_pid = 0;
                         }
                      }
                   }
